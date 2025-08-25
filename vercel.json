@@ -13,8 +13,8 @@
       "destination": "/public/login.html"
     },
     {
-      "source": "/(.*\\.(css|js|png|jpg|jpeg|gif|ico|svg))",
-      "destination": "/public/$1"
+      "source": "/(.*)\\.(css|js|png|jpg|jpeg|gif|ico|svg)",
+      "destination": "/public/$1.$2"
     }
   ]
 }
