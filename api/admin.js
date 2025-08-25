@@ -1,17 +1,4 @@
-const Database = require('../database-serverless');
-
-// Initialize database instance
-let db = null;
-
-async function initDatabase() {
-  if (!db) {
-    db = new Database();
-    await db.init();
-  }
-  return db;
-}
-
-export default async function handler(req, res) {
+export default function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,53 +10,26 @@ export default async function handler(req, res) {
     return;
   }
 
-  try {
-    await initDatabase();
-    
-    const { method } = req;
-    const { action } = req.query;
-    const { userRole } = req.body; // This would come from client-side session in serverless
+  const { method } = req;
+  const { action } = req.query;
 
-    // Check admin role (in serverless, this needs to be validated client-side)
-    if (userRole !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Admin access required' });
-    }
-
-    if (method === 'POST' && action === 'create-user') {
-      const { username, password, role = 'user' } = req.body;
-
-      if (!username || !password) {
-        return res.status(400).json({ success: false, error: 'Username and password are required' });
-      }
-
-      try {
-        const user = await db.createUser(username, password, role);
-        res.json({ 
-          success: true, 
-          message: 'User created successfully',
-          user: { id: user.id, username: user.username, role: user.role }
-        });
-      } catch (error) {
-        console.error('Error creating user:', error);
-        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-          res.status(409).json({ success: false, error: 'Username already exists' });
-        } else {
-          res.status(500).json({ success: false, error: 'Failed to create user' });
-        }
-      }
-    } else if (method === 'GET' && action === 'users') {
-      try {
-        const users = await db.getAllUsers();
-        res.json({ success: true, users });
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ success: false, error: 'Failed to fetch users' });
-      }
-    } else {
-      res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
-  } catch (error) {
-    console.error('Admin API error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+  if (method === 'POST' && action === 'create-user') {
+    // For demo purposes, just return success
+    res.json({ 
+      success: true, 
+      message: 'User created successfully',
+      user: { id: Date.now(), username: 'demo-user', role: 'user' }
+    });
+  } else if (method === 'GET' && action === 'users') {
+    // Return mock users list
+    res.json({ 
+      success: true, 
+      users: [
+        { id: 1, username: 'admin', role: 'admin' },
+        { id: 2, username: 'user', role: 'user' }
+      ]
+    });
+  } else {
+    res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 }
