@@ -34,43 +34,6 @@ async function uploadToBrowserStack(fileBuffer, filename) {
   }
 }
 
-// Parse multipart form data using busboy
-const Busboy = require('busboy');
-
-function parseMultipartData(req) {
-  return new Promise((resolve, reject) => {
-    const files = [];
-    const busboy = Busboy({ headers: req.headers });
-    
-    busboy.on('file', (fieldname, file, info) => {
-      const { filename, encoding, mimeType } = info;
-      const chunks = [];
-      
-      file.on('data', (chunk) => {
-        chunks.push(chunk);
-      });
-      
-      file.on('end', () => {
-        files.push({
-          filename,
-          contentType: mimeType,
-          data: Buffer.concat(chunks)
-        });
-      });
-    });
-    
-    busboy.on('finish', () => {
-      resolve(files);
-    });
-    
-    busboy.on('error', (error) => {
-      reject(error);
-    });
-    
-    req.pipe(busboy);
-  });
-}
-
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -86,70 +49,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const contentType = req.headers['content-type'];
-    
-    if (!contentType || !contentType.includes('multipart/form-data')) {
-      return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
-    }
-
-    // Parse multipart data using busboy
-    const files = await parseMultipartData(req);
-    
-    if (files.length === 0) {
-      return res.status(400).json({ error: 'No APK file uploaded' });
-    }
-
-    const file = files[0];
-    
-    // Validate APK file
-    if (!file.filename.endsWith('.apk') && 
-        file.contentType !== 'application/vnd.android.package-archive') {
-      return res.status(400).json({ error: 'Only APK files are allowed!' });
-    }
-
-    // Check file size (100MB limit)
-    if (file.data.length > 100 * 1024 * 1024) {
-      return res.status(400).json({ error: 'File size exceeds 100MB limit' });
-    }
-
-    // Upload to BrowserStack
-    const browserStackResponse = await uploadToBrowserStack(file.data, file.filename);
-    
-    const uploadRecord = {
-      id: Date.now(),
-      fileName: file.filename,
-      fileSize: file.data.length,
-      uploadTime: new Date().toISOString(),
-      appUrl: browserStackResponse.app_url,
-      customId: browserStackResponse.custom_id || null,
-      status: 'success'
-    };
-    
-    // Add to history
-    addRecord(uploadRecord);
-    
-    res.json({
-      success: true,
-      message: 'APK uploaded successfully to BrowserStack',
-      data: uploadRecord
+    // Simple test response first
+    return res.json({
+      success: false,
+      error: 'Upload functionality temporarily disabled for debugging. API endpoint is working.'
     });
     
   } catch (error) {
     console.error('Upload error:', error);
-    
-    const errorRecord = {
-      id: Date.now(),
-      fileName: file?.filename || 'Unknown',
-      fileSize: file?.data?.length || 0,
-      uploadTime: new Date().toISOString(),
-      appUrl: null,
-      customId: null,
-      status: 'error',
-      error: error.message
-    };
-    
-    // Add error to history
-    addRecord(errorRecord);
     
     res.status(500).json({
       success: false,
