@@ -2,10 +2,9 @@
   "name": "apk-upload-dashboard",
   "version": "1.0.0",
   "description": "Dashboard for uploading APK files to BrowserStack and getting app URLs",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "build": "echo 'No build step required'",
+    "start": "echo 'Serverless functions only'"
   },
   "dependencies": {
     "axios": "^1.11.0",

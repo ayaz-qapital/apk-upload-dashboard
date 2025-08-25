@@ -1,17 +1,1 @@
-{
-  "version": 2,
-  "rewrites": [
-    {
-      "source": "/login",
-      "destination": "/public/login.html"
-    },
-    {
-      "source": "/dashboard", 
-      "destination": "/public/index.html"
-    },
-    {
-      "source": "/",
-      "destination": "/public/login.html"
-    }
-  ]
-}
+{}

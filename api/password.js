@@ -1,4 +1,4 @@
-export default function handler(req, res) {
+module.exports = (req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,4 +26,4 @@ export default function handler(req, res) {
   } else {
     res.status(400).json({ success: false, error: 'Invalid action' });
   }
-}
+};
