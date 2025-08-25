@@ -34,45 +34,41 @@ async function uploadToBrowserStack(fileBuffer, filename) {
   }
 }
 
-// Parse multipart form data
-function parseMultipartData(body, boundary) {
-  const parts = body.split(`--${boundary}`);
-  const files = [];
-  
-  for (const part of parts) {
-    if (part.includes('Content-Disposition: form-data')) {
-      const lines = part.split('\r\n');
-      let filename = null;
-      let contentType = null;
-      let dataStartIndex = -1;
+// Parse multipart form data using busboy
+const Busboy = require('busboy');
+
+function parseMultipartData(req) {
+  return new Promise((resolve, reject) => {
+    const files = [];
+    const busboy = Busboy({ headers: req.headers });
+    
+    busboy.on('file', (fieldname, file, info) => {
+      const { filename, encoding, mimeType } = info;
+      const chunks = [];
       
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.includes('filename=')) {
-          const match = line.match(/filename="([^"]+)"/);
-          if (match) filename = match[1];
-        }
-        if (line.includes('Content-Type:')) {
-          contentType = line.split('Content-Type: ')[1];
-        }
-        if (line === '' && dataStartIndex === -1) {
-          dataStartIndex = i + 1;
-          break;
-        }
-      }
+      file.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
       
-      if (filename && dataStartIndex > -1) {
-        const fileData = lines.slice(dataStartIndex, -1).join('\r\n');
+      file.on('end', () => {
         files.push({
           filename,
-          contentType,
-          data: Buffer.from(fileData, 'binary')
+          contentType: mimeType,
+          data: Buffer.concat(chunks)
         });
-      }
-    }
-  }
-  
-  return files;
+      });
+    });
+    
+    busboy.on('finish', () => {
+      resolve(files);
+    });
+    
+    busboy.on('error', (error) => {
+      reject(error);
+    });
+    
+    req.pipe(busboy);
+  });
 }
 
 export default async function handler(req, res) {
@@ -96,22 +92,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
     }
 
-    // Get boundary from content-type header
-    const boundary = contentType.split('boundary=')[1];
-    if (!boundary) {
-      return res.status(400).json({ error: 'No boundary found in Content-Type' });
-    }
-
-    // Get raw body
-    let body = '';
-    req.setEncoding('binary');
-    
-    for await (const chunk of req) {
-      body += chunk;
-    }
-
-    // Parse multipart data
-    const files = parseMultipartData(body, boundary);
+    // Parse multipart data using busboy
+    const files = await parseMultipartData(req);
     
     if (files.length === 0) {
       return res.status(400).json({ error: 'No APK file uploaded' });
