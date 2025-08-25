@@ -26,23 +26,6 @@
                         <span class="stat-number" id="successfulUploads">0</span>
                         <span class="stat-label">Successful</span>
                     </div>
-                    <div class="user-menu">
-                        <button class="user-menu-btn" onclick="toggleUserMenu()">
-                            <i class="fas fa-user-circle"></i>
-                            <span id="currentUsername">User</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        <div class="user-dropdown" id="userDropdown">
-                            <button onclick="openPasswordModal()">
-                                <i class="fas fa-key"></i>
-                                Change Password
-                            </button>
-                            <button onclick="logout()">
-                                <i class="fas fa-sign-out-alt"></i>
-                                Logout
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </header>
@@ -126,51 +109,6 @@
                 </div>
             </section>
         </main>
-    </div>
-
-    <!-- Password Change Modal -->
-    <div class="modal-overlay" id="passwordModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>Change Password</h3>
-                <button class="modal-close" onclick="closePasswordModal()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <form id="passwordChangeForm" class="modal-form">
-                <div class="form-group">
-                    <label for="currentPassword">
-                        <i class="fas fa-lock"></i>
-                        Current Password
-                    </label>
-                    <input type="password" id="currentPassword" name="currentPassword" required>
-                </div>
-                <div class="form-group">
-                    <label for="newPassword">
-                        <i class="fas fa-key"></i>
-                        New Password
-                    </label>
-                    <input type="password" id="newPassword" name="newPassword" required minlength="6">
-                    <small>Minimum 6 characters</small>
-                </div>
-                <div class="form-group">
-                    <label for="confirmPassword">
-                        <i class="fas fa-check"></i>
-                        Confirm New Password
-                    </label>
-                    <input type="password" id="confirmPassword" name="confirmPassword" required minlength="6">
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-secondary" onclick="closePasswordModal()">
-                        Cancel
-                    </button>
-                    <button type="submit" class="btn-primary" id="changePasswordBtn">
-                        <i class="fas fa-save"></i>
-                        Change Password
-                    </button>
-                </div>
-            </form>
-        </div>
     </div>
 
     <!-- Toast Notifications -->

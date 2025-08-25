@@ -1,20 +1,18 @@
 {
-  "rewrites": [
+  "version": 2,
+  "routes": [
     {
-      "source": "/login",
-      "destination": "/public/login.html"
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
     },
     {
-      "source": "/dashboard", 
-      "destination": "/public/index.html"
-    },
-    {
-      "source": "/",
-      "destination": "/public/login.html"
-    },
-    {
-      "source": "/(.*)\\.(css|js|png|jpg|jpeg|gif|ico|svg)",
-      "destination": "/public/$1.$2"
+      "src": "/(.*)",
+      "dest": "/public/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/upload.js": {
+      "maxDuration": 30
+    }
+  }
 }

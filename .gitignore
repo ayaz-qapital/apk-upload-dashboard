@@ -1,10 +1,5 @@
 # Dependencies
 node_modules/
-.env
-uploads/
-*.log
-dashboard.db
-*.db
 
 # Environment variables
 .env
@@ -70,3 +65,5 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+.vercel

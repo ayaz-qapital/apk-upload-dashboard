@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
 
         try {
-            const response = await fetch('/api/auth?action=login', {
+            const response = await fetch('/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -28,12 +28,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
 
             if (response.ok && result.success) {
-                // Store user session data in localStorage for serverless environment
-                localStorage.setItem('isAuthenticated', 'true');
-                localStorage.setItem('userId', result.user.id);
-                localStorage.setItem('username', result.user.username);
-                localStorage.setItem('userRole', result.user.role);
-                
                 showToast('Login successful! Redirecting...', 'success');
                 setTimeout(() => {
                     window.location.href = '/dashboard';

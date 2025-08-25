@@ -1,34 +1,159 @@
-module.exports = (req, res) => {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', true);
+const axios = require('axios');
+const FormData = require('form-data');
+
+// BrowserStack API configuration
+const BROWSERSTACK_API_URL = 'https://api-cloud.browserstack.com/app-automate/upload';
+
+// Upload APK to BrowserStack
+async function uploadToBrowserStack(fileBuffer, filename) {
+  const BROWSERSTACK_USERNAME = process.env.BROWSERSTACK_USERNAME;
+  const BROWSERSTACK_ACCESS_KEY = process.env.BROWSERSTACK_ACCESS_KEY;
+
+  if (!BROWSERSTACK_USERNAME || !BROWSERSTACK_ACCESS_KEY) {
+    throw new Error('BrowserStack credentials not configured. Please set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY environment variables.');
+  }
+
+  try {
+    const form = new FormData();
+    form.append('file', fileBuffer, filename);
+    
+    const response = await axios.post(BROWSERSTACK_API_URL, form, {
+      headers: {
+        ...form.getHeaders(),
+      },
+      auth: {
+        username: BROWSERSTACK_USERNAME,
+        password: BROWSERSTACK_ACCESS_KEY
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    throw new Error(`BrowserStack upload failed: ${error.response?.data?.error || error.message}`);
+  }
+}
+
+// Parse multipart form data
+function parseMultipartData(body, boundary) {
+  const parts = body.split(`--${boundary}`);
+  const files = [];
+  
+  for (const part of parts) {
+    if (part.includes('Content-Disposition: form-data')) {
+      const lines = part.split('\r\n');
+      let filename = null;
+      let contentType = null;
+      let dataStartIndex = -1;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('filename=')) {
+          const match = line.match(/filename="([^"]+)"/);
+          if (match) filename = match[1];
+        }
+        if (line.includes('Content-Type:')) {
+          contentType = line.split('Content-Type: ')[1];
+        }
+        if (line === '' && dataStartIndex === -1) {
+          dataStartIndex = i + 1;
+          break;
+        }
+      }
+      
+      if (filename && dataStartIndex > -1) {
+        const fileData = lines.slice(dataStartIndex, -1).join('\r\n');
+        files.push({
+          filename,
+          contentType,
+          data: Buffer.from(fileData, 'binary')
+        });
+      }
+    }
+  }
+  
+  return files;
+}
+
+export default async function handler(req, res) {
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // For now, return a mock successful upload
-  // In production, you'd implement actual BrowserStack upload logic
-  const uploadRecord = {
-    id: Date.now(),
-    fileName: 'demo.apk',
-    fileSize: 1024000,
-    uploadTime: new Date().toISOString(),
-    appUrl: 'bs://mock-app-url-' + Date.now(),
-    customId: 'mock-custom-id',
-    status: 'success'
-  };
-  
-  res.json({
-    success: true,
-    message: 'APK uploaded successfully to BrowserStack',
-    data: uploadRecord
-  });
-};
+  try {
+    const contentType = req.headers['content-type'];
+    
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+      return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
+    }
+
+    // Get boundary from content-type header
+    const boundary = contentType.split('boundary=')[1];
+    if (!boundary) {
+      return res.status(400).json({ error: 'No boundary found in Content-Type' });
+    }
+
+    // Get raw body
+    let body = '';
+    req.setEncoding('binary');
+    
+    for await (const chunk of req) {
+      body += chunk;
+    }
+
+    // Parse multipart data
+    const files = parseMultipartData(body, boundary);
+    
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'No APK file uploaded' });
+    }
+
+    const file = files[0];
+    
+    // Validate APK file
+    if (!file.filename.endsWith('.apk') && 
+        file.contentType !== 'application/vnd.android.package-archive') {
+      return res.status(400).json({ error: 'Only APK files are allowed!' });
+    }
+
+    // Check file size (100MB limit)
+    if (file.data.length > 100 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File size exceeds 100MB limit' });
+    }
+
+    // Upload to BrowserStack
+    const browserStackResponse = await uploadToBrowserStack(file.data, file.filename);
+    
+    const uploadRecord = {
+      id: Date.now(),
+      fileName: file.filename,
+      fileSize: file.data.length,
+      uploadTime: new Date().toISOString(),
+      appUrl: browserStackResponse.app_url,
+      customId: browserStackResponse.custom_id || null,
+      status: 'success'
+    };
+    
+    res.json({
+      success: true,
+      message: 'APK uploaded successfully to BrowserStack',
+      data: uploadRecord
+    });
+    
+  } catch (error) {
+    console.error('Upload error:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+}

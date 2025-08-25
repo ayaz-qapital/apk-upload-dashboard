@@ -18,21 +18,17 @@ const successfulUploads = document.getElementById('successfulUploads');
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
-    // Check authentication first
-    if (!isAuthenticated()) {
-        // Redirect to login page if not authenticated
-        window.location.replace('/login');
-        return;
-    }
-    
     setupEventListeners();
     loadHistory();
     setupPasswordChangeModal();
     
     // Set current username in the header
-    const storedUsername = localStorage.getItem('username');
+    const storedUsername = sessionStorage.getItem('username');
     if (storedUsername) {
         document.getElementById('currentUsername').textContent = storedUsername;
+    } else {
+        // If no stored username, try to get it from the session
+        getCurrentUser();
     }
     
     // Close dropdown when clicking outside
@@ -150,14 +146,13 @@ async function handleUpload(e) {
     showProgress();
     
     try {
-        const response = await fetch('/api/upload', {
+        const response = await fetch('/upload', {
             method: 'POST',
             body: formData
         });
         
         if (response.status === 401) {
             // User is not authenticated, redirect to login
-            clearAuth();
             window.location.href = '/login';
             return;
         }
@@ -165,38 +160,15 @@ async function handleUpload(e) {
         const result = await response.json();
         
         if (result.success) {
-            // Store upload record in localStorage for serverless environment
-            const storedHistory = localStorage.getItem('uploadHistory');
-            let history = storedHistory ? JSON.parse(storedHistory) : [];
-            history.unshift(result.data);
-            localStorage.setItem('uploadHistory', JSON.stringify(history));
-            
             showToast('APK uploaded successfully to BrowserStack!', 'success');
             resetForm();
             loadHistory();
         } else {
-            // Store error record as well
-            const errorRecord = result.data || {
-                id: Date.now(),
-                fileName: fileInput.files[0]?.name || 'Unknown',
-                fileSize: fileInput.files[0]?.size || 0,
-                uploadTime: new Date().toISOString(),
-                appUrl: null,
-                customId: null,
-                status: 'error',
-                error: result.error
-            };
-            
-            const storedHistory = localStorage.getItem('uploadHistory');
-            let history = storedHistory ? JSON.parse(storedHistory) : [];
-            history.unshift(errorRecord);
-            localStorage.setItem('uploadHistory', JSON.stringify(history));
-            
             throw new Error(result.error || 'Upload failed');
         }
     } catch (error) {
         showToast(`Upload failed: ${error.message}`, 'error');
-        loadHistory(); // Reload history to show the failed attempt
+        loadHistory(); // Load history to show the failed attempt
     } finally {
         hideProgress();
     }
@@ -244,24 +216,23 @@ function resetForm() {
     removeFile();
 }
 
-// Load upload history (using localStorage for serverless)
+// Load upload history
 async function loadHistory() {
     try {
-        // In serverless environment, we'll store history in localStorage
-        const storedHistory = localStorage.getItem('uploadHistory');
-        if (storedHistory) {
-            uploadHistory = JSON.parse(storedHistory);
-        } else {
-            uploadHistory = [];
+        const response = await fetch('/history');
+        
+        if (response.status === 401) {
+            // User is not authenticated, redirect to login
+            window.location.href = '/login';
+            return;
         }
+        
+        uploadHistory = await response.json();
         displayHistory();
         updateStats();
     } catch (error) {
         console.error('Failed to load history:', error);
         showToast('Failed to load upload history', 'error');
-        uploadHistory = [];
-        displayHistory();
-        updateStats();
     }
 }
 
@@ -351,20 +322,28 @@ async function copyToClipboard(text) {
     }
 }
 
-// Delete record (from localStorage in serverless environment)
+// Delete record
 async function deleteRecord(id) {
     if (!confirm('Are you sure you want to delete this record?')) {
         return;
     }
     
     try {
-        const storedHistory = localStorage.getItem('uploadHistory');
-        if (storedHistory) {
-            let history = JSON.parse(storedHistory);
-            history = history.filter(record => record.id !== id);
-            localStorage.setItem('uploadHistory', JSON.stringify(history));
+        const response = await fetch(`/history/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.status === 401) {
+            // User is not authenticated, redirect to login
+            window.location.href = '/login';
+            return;
+        }
+        
+        if (response.ok) {
             showToast('Record deleted successfully', 'success');
             loadHistory();
+        } else {
+            throw new Error('Failed to delete record');
         }
     } catch (error) {
         showToast('Failed to delete record', 'error');
@@ -445,16 +424,12 @@ async function handlePasswordChange(e) {
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing...';
     
     try {
-        const userId = localStorage.getItem('userId');
-        const response = await fetch('/api/password?action=change', {
+        const response = await fetch('/change-password', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                ...data,
-                userId: userId
-            })
+            body: JSON.stringify(data)
         });
         
         const result = await response.json();
@@ -474,23 +449,26 @@ async function handlePasswordChange(e) {
     }
 }
 
-// Check if user is authenticated (client-side for serverless)
-function isAuthenticated() {
-    return localStorage.getItem('isAuthenticated') === 'true';
-}
-
-// Clear authentication data
-function clearAuth() {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userRole');
+// Get current user info
+async function getCurrentUser() {
+    try {
+        const response = await fetch('/user-info');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.user) {
+                document.getElementById('currentUsername').textContent = result.user.username;
+                sessionStorage.setItem('username', result.user.username);
+            }
+        }
+    } catch (error) {
+        console.error('Error getting user info:', error);
+    }
 }
 
 // Logout function
 async function logout() {
     try {
-        const response = await fetch('/api/auth?action=logout', {
+        const response = await fetch('/logout', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -500,8 +478,7 @@ async function logout() {
         const result = await response.json();
         
         if (result.success) {
-            clearAuth();
-            localStorage.clear(); // Clear all stored data
+            sessionStorage.clear();
             showToast('Logged out successfully', 'success');
             setTimeout(() => {
                 window.location.href = '/login';
@@ -511,13 +488,7 @@ async function logout() {
         }
     } catch (error) {
         console.error('Logout error:', error);
-        // Even if API call fails, clear local auth
-        clearAuth();
-        localStorage.clear();
-        showToast('Logged out', 'success');
-        setTimeout(() => {
-            window.location.href = '/login';
-        }, 1000);
+        showToast('Logout failed', 'error');
     }
 }
 
