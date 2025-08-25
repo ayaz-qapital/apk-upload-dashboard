@@ -20,7 +20,8 @@ const successfulUploads = document.getElementById('successfulUploads');
 document.addEventListener('DOMContentLoaded', function() {
     // Check authentication first
     if (!isAuthenticated()) {
-        window.location.href = '/login';
+        // Redirect to login page if not authenticated
+        window.location.replace('/login');
         return;
     }
     
