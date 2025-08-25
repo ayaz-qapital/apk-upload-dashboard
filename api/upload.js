@@ -1,5 +1,6 @@
 const axios = require('axios');
 const FormData = require('form-data');
+const { addRecord } = require('./shared-storage');
 
 // BrowserStack API configuration
 const BROWSERSTACK_API_URL = 'https://api-cloud.browserstack.com/app-automate/upload';
@@ -142,6 +143,9 @@ export default async function handler(req, res) {
       status: 'success'
     };
     
+    // Add to history
+    addRecord(uploadRecord);
+    
     res.json({
       success: true,
       message: 'APK uploaded successfully to BrowserStack',
@@ -150,6 +154,20 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('Upload error:', error);
+    
+    const errorRecord = {
+      id: Date.now(),
+      fileName: file?.filename || 'Unknown',
+      fileSize: file?.data?.length || 0,
+      uploadTime: new Date().toISOString(),
+      appUrl: null,
+      customId: null,
+      status: 'error',
+      error: error.message
+    };
+    
+    // Add error to history
+    addRecord(errorRecord);
     
     res.status(500).json({
       success: false,

@@ -146,7 +146,7 @@ async function handleUpload(e) {
     showProgress();
     
     try {
-        const response = await fetch('/upload', {
+        const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData
         });
@@ -219,7 +219,7 @@ function resetForm() {
 // Load upload history
 async function loadHistory() {
     try {
-        const response = await fetch('/history');
+        const response = await fetch('/api/history');
         
         if (response.status === 401) {
             // User is not authenticated, redirect to login
@@ -329,7 +329,7 @@ async function deleteRecord(id) {
     }
     
     try {
-        const response = await fetch(`/history/${id}`, {
+        const response = await fetch(`/api/history?id=${id}`, {
             method: 'DELETE'
         });
         
