@@ -16,6 +16,15 @@ const resultsContainer = document.getElementById('resultsContainer');
 const totalUploads = document.getElementById('totalUploads');
 const successfulUploads = document.getElementById('successfulUploads');
 
+// Safe JSON parse helper for fetch responses
+async function safeJson(resp) {
+    try {
+        return await resp.json();
+    } catch (_) {
+        return null;
+    }
+}
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
@@ -30,15 +39,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // If no stored username, try to get it from the session
         getCurrentUser();
     }
-
-// Safe JSON parse helper for fetch responses
-async function safeJson(resp) {
-    try {
-        return await resp.json();
-    } catch (_) {
-        return null;
-    }
-}
     
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
@@ -199,7 +199,11 @@ async function handleUpload(e) {
         const response = await fetch('/api/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: secureUrl })
+            body: JSON.stringify({ 
+                url: secureUrl,
+                fileName: file.name,
+                fileSize: file.size
+            })
         });
         
         if (response.status === 401) {

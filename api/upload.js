@@ -42,13 +42,27 @@ module.exports = async function handler(req, res) {
 
     const data = bsResp.data || {};
 
+    const uploadRecord = {
+      id: Date.now(),
+      fileName: req.body.fileName || 'app.apk',
+      fileSize: req.body.fileSize || 0,
+      uploadTime: new Date().toISOString(),
+      appUrl: data.app_url || null,
+      customId: data.custom_id || null,
+      status: 'success'
+    };
+
+    // Save to history (call our history API)
+    try {
+      await axios.post(`${req.headers.origin || 'https://' + req.headers.host}/api/history`, uploadRecord);
+    } catch (historyErr) {
+      console.warn('Failed to save to history:', historyErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: 'APK uploaded successfully to BrowserStack',
-      data: {
-        appUrl: data.app_url || null,
-        customId: data.custom_id || null,
-      },
+      data: uploadRecord,
     });
   } catch (err) {
     const detail = err.response?.data?.error || err.response?.data || err.message;
