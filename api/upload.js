@@ -1,180 +1,58 @@
 const axios = require('axios');
-const FormData = require('form-data');
-const { addRecord } = require('./shared-storage');
 
-// BrowserStack API configuration
-const BROWSERSTACK_API_URL = 'https://api-cloud.browserstack.com/app-automate/upload';
+// Upload to BrowserStack using a public URL (Cloudinary secure_url)
+// Expects JSON body: { url: 'https://res.cloudinary.com/...', fileName?, fileSize?, customId? }
+// Env vars required: BROWSERSTACK_USERNAME, BROWSERSTACK_ACCESS_KEY
 
-// Upload APK to BrowserStack
-async function uploadToBrowserStack(fileBuffer, filename) {
-  const BROWSERSTACK_USERNAME = process.env.BROWSERSTACK_USERNAME;
-  const BROWSERSTACK_ACCESS_KEY = process.env.BROWSERSTACK_ACCESS_KEY;
-
-  if (!BROWSERSTACK_USERNAME || !BROWSERSTACK_ACCESS_KEY) {
-    throw new Error('BrowserStack credentials not configured. Please set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY environment variables.');
-  }
-
-  try {
-    const form = new FormData();
-    form.append('file', fileBuffer, filename);
-    
-    const response = await axios.post(BROWSERSTACK_API_URL, form, {
-      headers: {
-        ...form.getHeaders(),
-      },
-      auth: {
-        username: BROWSERSTACK_USERNAME,
-        password: BROWSERSTACK_ACCESS_KEY
-      }
-    });
-    
-    return response.data;
-  } catch (error) {
-    throw new Error(`BrowserStack upload failed: ${error.response?.data?.error || error.message}`);
-  }
-}
-
-// Parse multipart form data using built-in approach
-function parseMultipartData(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    
-    req.on('data', chunk => {
-      chunks.push(chunk);
-    });
-    
-    req.on('end', () => {
-      try {
-        const buffer = Buffer.concat(chunks);
-        const boundary = req.headers['content-type'].split('boundary=')[1];
-        
-        if (!boundary) {
-          return reject(new Error('No boundary found'));
-        }
-        
-        const parts = buffer.toString('binary').split(`--${boundary}`);
-        const files = [];
-        
-        for (const part of parts) {
-          if (part.includes('Content-Disposition: form-data') && part.includes('filename=')) {
-            const lines = part.split('\r\n');
-            let filename = null;
-            let dataStartIndex = -1;
-            
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              if (line.includes('filename=')) {
-                const match = line.match(/filename="([^"]+)"/);
-                if (match) filename = match[1];
-              }
-              if (line === '' && dataStartIndex === -1) {
-                dataStartIndex = i + 1;
-                break;
-              }
-            }
-            
-            if (filename && dataStartIndex > -1) {
-              const fileData = lines.slice(dataStartIndex, -1).join('\r\n');
-              files.push({
-                filename,
-                data: Buffer.from(fileData, 'binary')
-              });
-            }
-          }
-        }
-        
-        resolve(files);
-      } catch (error) {
-        reject(error);
-      }
-    });
-    
-    req.on('error', reject);
-  });
-}
-
-export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const { BROWSERSTACK_USERNAME, BROWSERSTACK_ACCESS_KEY } = process.env;
+  if (!BROWSERSTACK_USERNAME || !BROWSERSTACK_ACCESS_KEY) {
+    return res.status(500).json({ error: 'BrowserStack credentials are not configured' });
+  }
+
   try {
-    const contentType = req.headers['content-type'];
-    
-    if (!contentType || !contentType.includes('multipart/form-data')) {
-      return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
+    const { url, customId } = req.body || {};
+
+    if (!url) {
+      return res.status(400).json({ error: 'Missing required field: url' });
     }
 
-    // Parse multipart data
-    const files = await parseMultipartData(req);
-    
-    if (files.length === 0) {
-      return res.status(400).json({ error: 'No APK file uploaded' });
-    }
+    // BrowserStack upload via public URL
+    const form = new URLSearchParams();
+    form.append('url', url);
+    if (customId) form.append('custom_id', String(customId));
 
-    const file = files[0];
-    
-    // Validate APK file
-    if (!file.filename.endsWith('.apk')) {
-      return res.status(400).json({ error: 'Only APK files are allowed!' });
-    }
+    const bsResp = await axios.post(
+      'https://api-cloud.browserstack.com/app-automate/upload',
+      form,
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        auth: {
+          username: BROWSERSTACK_USERNAME,
+          password: BROWSERSTACK_ACCESS_KEY,
+        },
+        timeout: 120000,
+      }
+    );
 
-    // Check file size (4MB limit for Vercel functions)
-    if (file.data.length > 4 * 1024 * 1024) {
-      return res.status(400).json({ error: 'File size exceeds 4MB limit. Please use a smaller APK file or upgrade to Vercel Pro for larger uploads.' });
-    }
+    const data = bsResp.data || {};
 
-    // Upload to BrowserStack
-    const browserStackResponse = await uploadToBrowserStack(file.data, file.filename);
-    
-    const uploadRecord = {
-      id: Date.now(),
-      fileName: file.filename,
-      fileSize: file.data.length,
-      uploadTime: new Date().toISOString(),
-      appUrl: browserStackResponse.app_url,
-      customId: browserStackResponse.custom_id || null,
-      status: 'success'
-    };
-    
-    // Add to history
-    addRecord(uploadRecord);
-    
-    res.json({
+    return res.status(200).json({
       success: true,
       message: 'APK uploaded successfully to BrowserStack',
-      data: uploadRecord
+      data: {
+        appUrl: data.app_url || null,
+        customId: data.custom_id || null,
+      },
     });
-    
-  } catch (error) {
-    console.error('Upload error:', error);
-    
-    const errorRecord = {
-      id: Date.now(),
-      fileName: 'Unknown',
-      fileSize: 0,
-      uploadTime: new Date().toISOString(),
-      appUrl: null,
-      customId: null,
-      status: 'error',
-      error: error.message
-    };
-    
-    // Add error to history
-    addRecord(errorRecord);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  } catch (err) {
+    const detail = err.response?.data?.error || err.response?.data || err.message;
+    console.error('BrowserStack upload error:', detail);
+    return res.status(500).json({ success: false, error: `BrowserStack upload failed: ${detail}` });
   }
 }

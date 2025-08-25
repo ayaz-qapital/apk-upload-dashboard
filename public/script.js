@@ -30,6 +30,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // If no stored username, try to get it from the session
         getCurrentUser();
     }
+
+// Safe JSON parse helper for fetch responses
+async function safeJson(resp) {
+    try {
+        return await resp.json();
+    } catch (_) {
+        return null;
+    }
+}
     
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
@@ -139,16 +148,58 @@ function validateForm() {
 async function handleUpload(e) {
     e.preventDefault();
     
-    const formData = new FormData();
-    formData.append('apk', fileInput.files[0]);
+    const file = fileInput.files[0];
+    if (!file) {
+        showToast('Please select an APK file', 'error');
+        return;
+    }
     
     // Show progress
     showProgress();
     
     try {
+        // 1) Request Cloudinary signed params from our serverless function
+        const publicIdBase = (file.name || 'app')
+            .replace(/\.[^/.]+$/, '')
+            .replace(/[^A-Za-z0-9._-]/g, '_');
+        const sigResp = await fetch('/api/cloudinary-signature', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ public_id: publicIdBase })
+        });
+        if (!sigResp.ok) {
+            const err = await safeJson(sigResp);
+            throw new Error(err?.error || 'Failed to get Cloudinary signature');
+        }
+        const sigData = await sigResp.json();
+        
+        // 2) Upload the file directly to Cloudinary as a raw resource
+        const cldForm = new FormData();
+        cldForm.append('file', file);
+        cldForm.append('api_key', sigData.apiKey);
+        cldForm.append('timestamp', sigData.timestamp);
+        cldForm.append('signature', sigData.signature);
+        cldForm.append('folder', sigData.folder);
+        cldForm.append('resource_type', sigData.resourceType);
+        if (sigData.publicId) cldForm.append('public_id', sigData.publicId);
+        
+        const cldResp = await fetch(sigData.uploadUrl, {
+            method: 'POST',
+            body: cldForm
+        });
+        if (!cldResp.ok) {
+            const err = await safeJson(cldResp);
+            throw new Error(err?.error?.message || 'Cloudinary upload failed');
+        }
+        const cldJson = await cldResp.json();
+        const secureUrl = cldJson.secure_url;
+        if (!secureUrl) throw new Error('No secure URL returned from Cloudinary');
+        
+        // 3) Tell our Vercel API to upload the Cloudinary URL to BrowserStack
         const response = await fetch('/api/upload', {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: secureUrl })
         });
         
         if (response.status === 401) {
@@ -219,7 +270,7 @@ function resetForm() {
 // Load upload history
 async function loadHistory() {
     try {
-        const response = await fetch('/api/history');
+        const response = await fetch('/history');
         
         if (response.status === 401) {
             // User is not authenticated, redirect to login
@@ -329,7 +380,7 @@ async function deleteRecord(id) {
     }
     
     try {
-        const response = await fetch(`/api/history?id=${id}`, {
+        const response = await fetch(`/history/${id}`, {
             method: 'DELETE'
         });
         
