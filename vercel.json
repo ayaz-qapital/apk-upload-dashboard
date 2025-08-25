@@ -14,8 +14,5 @@
     "api/upload.js": {
       "maxDuration": 60
     }
-  },
-  "limits": {
-    "duration": 60000
   }
 }
