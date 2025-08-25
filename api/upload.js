@@ -128,9 +128,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Only APK files are allowed!' });
     }
 
-    // Check file size (100MB limit)
-    if (file.data.length > 100 * 1024 * 1024) {
-      return res.status(400).json({ error: 'File size exceeds 100MB limit' });
+    // Check file size (4MB limit for Vercel functions)
+    if (file.data.length > 4 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File size exceeds 4MB limit. Please use a smaller APK file or upgrade to Vercel Pro for larger uploads.' });
     }
 
     // Upload to BrowserStack

@@ -12,7 +12,10 @@
   ],
   "functions": {
     "api/upload.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
+  },
+  "limits": {
+    "duration": 60000
   }
 }
