@@ -7,6 +7,10 @@ const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${process.env.REA
 export const uploadApkViaCloudinary = async (file, onProgress) => {
   try {
     console.log('Starting upload for file:', file.name, 'size:', file.size);
+    console.log('Environment variables:', {
+      REACT_APP_CLOUDINARY_CLOUD_NAME: process.env.REACT_APP_CLOUDINARY_CLOUD_NAME,
+      REACT_APP_CLOUDINARY_API_KEY: process.env.REACT_APP_CLOUDINARY_API_KEY
+    });
     
     // Step 1: Get signature from our API
     const timestamp = Math.round(new Date().getTime() / 1000);
@@ -27,12 +31,24 @@ export const uploadApkViaCloudinary = async (file, onProgress) => {
       throw new Error('Failed to get Cloudinary signature');
     }
 
+    // Check if we have the required environment variables
+    const apiKey = process.env.REACT_APP_CLOUDINARY_API_KEY;
+    const cloudName = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+    
+    if (!apiKey) {
+      throw new Error('REACT_APP_CLOUDINARY_API_KEY environment variable is not set');
+    }
+    
+    if (!cloudName) {
+      throw new Error('REACT_APP_CLOUDINARY_CLOUD_NAME environment variable is not set');
+    }
+
     // Step 2: Upload to Cloudinary
     const formData = new FormData();
     formData.append('file', file);
     formData.append('timestamp', timestamp.toString());
     formData.append('resource_type', 'raw');
-    formData.append('api_key', process.env.REACT_APP_CLOUDINARY_API_KEY || '');
+    formData.append('api_key', apiKey);
     formData.append('signature', signatureRes.data.signature);
 
     console.log('Uploading to Cloudinary URL:', CLOUDINARY_UPLOAD_URL);
