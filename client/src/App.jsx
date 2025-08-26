@@ -1,6 +1,7 @@
 import { CssBaseline, Container, Typography, Box, createTheme, ThemeProvider } from '@mui/material';
 import UploadCard from './components/UploadCard';
 import HistoryTable from './components/HistoryTable';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useState, useMemo } from 'react';
 
 const theme = createTheme({
@@ -26,11 +27,13 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="md" sx={{ py: 6 }}>
-        {header}
-        <UploadCard onUploaded={onUploaded} />
-        <HistoryTable refreshKey={refreshKey} />
-      </Container>
+      <ErrorBoundary>
+        <Container maxWidth="md" sx={{ py: 6 }}>
+          {header}
+          <UploadCard onUploaded={onUploaded} />
+          <HistoryTable refreshKey={refreshKey} />
+        </Container>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

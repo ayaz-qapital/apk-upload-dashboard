@@ -5,6 +5,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { uploadApkViaCloudinary } from '../api';
+import { SafeText } from './SafeComponent';
 
 export default function UploadCard({ onUploaded }) {
   const [error, setError] = useState('');
@@ -26,10 +27,22 @@ export default function UploadCard({ onUploaded }) {
       const res = await uploadApkViaCloudinary(file, (progress) => {
         setProgress(progress);
       });
-      setLastResult(res.data);
-      onUploaded?.(res.data);
+      if (res?.data) {
+        setLastResult(res.data);
+        if (typeof onUploaded === 'function') {
+          onUploaded(res.data);
+        }
+      } else {
+        throw new Error('Invalid response from server');
+      }
     } catch (e) {
-      setError(e?.response?.data?.error || e.message || 'Upload failed');
+      console.error('Upload error:', e);
+      const errorMessage = typeof e?.response?.data?.error === 'string' 
+        ? e.response.data.error 
+        : typeof e?.message === 'string' 
+        ? e.message 
+        : 'Upload failed';
+      setError(errorMessage);
     } finally {
       setUploading(false);
       setProgress(0);
@@ -40,7 +53,11 @@ export default function UploadCard({ onUploaded }) {
 
   const copy = async () => {
     if (lastResult?.app_url) {
-      await navigator.clipboard.writeText(lastResult.app_url);
+      try {
+        await navigator.clipboard.writeText(String(lastResult.app_url));
+      } catch (err) {
+        console.error('Failed to copy to clipboard:', err);
+      }
     }
   };
 
@@ -83,12 +100,12 @@ export default function UploadCard({ onUploaded }) {
         {lastResult?.app_url && (
           <Stack direction="row" spacing={1} sx={{ mt: 2 }} alignItems="center">
             <Alert severity="success" sx={{ flex: 1 }}>
-              Uploaded! app_url: {lastResult.app_url}
+              Uploaded! app_url: <SafeText value={lastResult.app_url} />
             </Alert>
             <Button variant="outlined" startIcon={<ContentCopyIcon />} onClick={copy}>
               Copy
             </Button>
-            <Button variant="contained" endIcon={<OpenInNewIcon />} href={lastResult.app_url} target="_blank">
+            <Button variant="contained" endIcon={<OpenInNewIcon />} href={String(lastResult.app_url || '#')} target="_blank">
               Open
             </Button>
           </Stack>
