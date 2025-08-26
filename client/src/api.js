@@ -6,17 +6,22 @@ const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${process.env.REA
 
 export const uploadApkViaCloudinary = async (file, onProgress) => {
   try {
+    console.log('Starting upload for file:', file.name, 'size:', file.size);
+    
     // Step 1: Get signature from our API
     const timestamp = Math.round(new Date().getTime() / 1000);
     const params = {
       timestamp,
-      upload_preset: 'apk_uploads',
       resource_type: 'raw'
     };
 
+    console.log('Requesting signature with params:', params);
+    
     const signatureRes = await api.post('/api/cloudinary-signature', {
       params_to_sign: params
     });
+
+    console.log('Signature response:', signatureRes.data);
 
     if (!signatureRes.data?.signature) {
       throw new Error('Failed to get Cloudinary signature');
@@ -26,10 +31,12 @@ export const uploadApkViaCloudinary = async (file, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('timestamp', timestamp.toString());
-    formData.append('upload_preset', 'apk_uploads');
     formData.append('resource_type', 'raw');
     formData.append('api_key', process.env.REACT_APP_CLOUDINARY_API_KEY || '');
     formData.append('signature', signatureRes.data.signature);
+
+    console.log('Uploading to Cloudinary URL:', CLOUDINARY_UPLOAD_URL);
+    console.log('FormData contents:', Array.from(formData.entries()));
 
     const cloudinaryRes = await axios.post(CLOUDINARY_UPLOAD_URL, formData, {
       onUploadProgress: (e) => {
@@ -39,6 +46,8 @@ export const uploadApkViaCloudinary = async (file, onProgress) => {
         }
       }
     });
+
+    console.log('Cloudinary response:', cloudinaryRes.data);
 
     if (!cloudinaryRes.data?.secure_url) {
       throw new Error('Cloudinary upload failed - no secure URL returned');
@@ -62,6 +71,8 @@ export const uploadApkViaCloudinary = async (file, onProgress) => {
     return result;
   } catch (error) {
     console.error('Upload error:', error);
+    console.error('Error response:', error.response?.data);
+    console.error('Error status:', error.response?.status);
     throw error;
   }
 };
