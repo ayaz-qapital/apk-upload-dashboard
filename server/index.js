@@ -7,7 +7,6 @@ const axios = require('axios')
 const FormData = require('form-data')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { uploadToS3, deleteFromS3, getS3FileUrl } = require('./aws-config')
 require('dotenv').config()
 
 const app = express()
@@ -25,8 +24,30 @@ fs.ensureDirSync(uploadsDir)
 const dataDir = path.join(__dirname, 'data')
 fs.ensureDirSync(dataDir)
 
-// Use S3 upload configuration (supports up to 500MB)
-const upload = uploadToS3
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir)
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+})
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (path.extname(file.originalname).toLowerCase() === '.apk') {
+      cb(null, true)
+    } else {
+      cb(new Error('Only APK files are allowed'))
+    }
+  },
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB limit
+  }
+})
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
@@ -78,8 +99,8 @@ const saveUploads = (uploads) => {
   }
 }
 
-// BrowserStack API helper for S3 URLs
-const uploadToBrowserStackFromS3 = async (s3Url, originalName) => {
+// BrowserStack API helper
+const uploadToBrowserStack = async (filePath, originalName) => {
   try {
     const username = process.env.BROWSERSTACK_USERNAME
     const accessKey = process.env.BROWSERSTACK_ACCESS_KEY
@@ -88,13 +109,10 @@ const uploadToBrowserStackFromS3 = async (s3Url, originalName) => {
       throw new Error('BrowserStack credentials not configured')
     }
 
-    // Download file from S3 and upload to BrowserStack
-    const response = await axios.get(s3Url, { responseType: 'stream' })
-    
     const form = new FormData()
-    form.append('file', response.data, originalName)
+    form.append('file', fs.createReadStream(filePath))
 
-    const browserStackResponse = await axios.post(
+    const response = await axios.post(
       'https://api-cloud.browserstack.com/app-automate/upload',
       form,
       {
@@ -104,13 +122,11 @@ const uploadToBrowserStackFromS3 = async (s3Url, originalName) => {
         auth: {
           username: username,
           password: accessKey
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
+        }
       }
     )
 
-    return browserStackResponse.data.app_url
+    return response.data.app_url
   } catch (error) {
     console.error('BrowserStack upload error:', error.response?.data || error.message)
     throw new Error('Failed to upload to BrowserStack: ' + (error.response?.data?.error || error.message))
@@ -144,7 +160,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
-// Upload APK endpoint (now uses S3)
+// Upload APK endpoint
 app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res) => {
   try {
     if (!req.file) {
@@ -152,8 +168,7 @@ app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res
     }
 
     const uploadId = Date.now().toString()
-    const s3Key = req.file.key
-    const s3Location = req.file.location
+    const filePath = req.file.path
     const originalName = req.file.originalname
     const fileSize = req.file.size
 
@@ -164,9 +179,7 @@ app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res
       fileSize: `${(fileSize / (1024 * 1024)).toFixed(2)} MB`,
       status: 'processing',
       uploadDate: new Date().toISOString(),
-      appUrl: null,
-      s3Key: s3Key,
-      s3Location: s3Location
+      appUrl: null
     }
 
     // Save initial record
@@ -177,13 +190,9 @@ app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res
     // Send immediate response
     res.json(uploadRecord)
 
-    // Upload to BrowserStack asynchronously using S3 URL
-    console.log(`Starting BrowserStack upload for: ${originalName}`)
-    console.log(`S3 Location: ${s3Location}`)
-    
+    // Upload to BrowserStack asynchronously
     try {
-      const appUrl = await uploadToBrowserStackFromS3(s3Location, originalName)
-      console.log(`BrowserStack upload successful. App URL: ${appUrl}`)
+      const appUrl = await uploadToBrowserStack(filePath, originalName)
       
       // Update record with app URL
       const updatedUploads = loadUploads()
@@ -192,11 +201,12 @@ app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res
         updatedUploads[recordIndex].status = 'completed'
         updatedUploads[recordIndex].appUrl = appUrl
         saveUploads(updatedUploads)
-        console.log(`Updated record ${uploadId} with app URL`)
       }
+
+      // Clean up local file
+      fs.remove(filePath).catch(console.error)
     } catch (error) {
-      console.error('BrowserStack upload failed:', error.message)
-      console.error('Full error:', error)
+      console.error('BrowserStack upload failed:', error)
       
       // Update record with error status
       const updatedUploads = loadUploads()
@@ -205,8 +215,10 @@ app.post('/api/upload', authenticateToken, upload.single('apk'), async (req, res
         updatedUploads[recordIndex].status = 'failed'
         updatedUploads[recordIndex].error = error.message
         saveUploads(updatedUploads)
-        console.log(`Updated record ${uploadId} with failed status`)
       }
+
+      // Clean up local file
+      fs.remove(filePath).catch(console.error)
     }
   } catch (error) {
     console.error('Upload error:', error)
@@ -240,8 +252,8 @@ app.get('/api/uploads/:id', authenticateToken, (req, res) => {
   }
 })
 
-// Delete upload endpoint (now deletes from S3 too)
-app.delete('/api/uploads/:id', authenticateToken, async (req, res) => {
+// Delete upload endpoint
+app.delete('/api/uploads/:id', authenticateToken, (req, res) => {
   try {
     const uploads = loadUploads()
     const uploadIndex = uploads.findIndex(u => u.id === req.params.id)
@@ -250,21 +262,8 @@ app.delete('/api/uploads/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Upload not found' })
     }
 
-    const deletedUpload = uploads[uploadIndex]
-
-    // Delete from S3 if s3Key exists
-    if (deletedUpload.s3Key) {
-      try {
-        await deleteFromS3(deletedUpload.s3Key)
-        console.log(`Deleted from S3: ${deletedUpload.s3Key}`)
-      } catch (s3Error) {
-        console.error('Failed to delete from S3:', s3Error)
-        // Continue with database deletion even if S3 deletion fails
-      }
-    }
-
     // Remove the upload from the array
-    uploads.splice(uploadIndex, 1)
+    const deletedUpload = uploads.splice(uploadIndex, 1)[0]
     saveUploads(uploads)
 
     console.log(`Deleted upload: ${deletedUpload.fileName} (ID: ${deletedUpload.id})`)
