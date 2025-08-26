@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 // Serverless function to generate a signed Cloudinary upload payload
 // We only sign parameters; the browser uploads the file directly to Cloudinary.
@@ -14,6 +14,14 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  let body = {};
+  try {
+    body = req.body || {}; // If you use a frontend fetch with JSON
+  } catch (err) {
+    console.error('Failed to parse body:', err);
+  }
+
+  const { public_id } = body;
 
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_FOLDER } = process.env;
 
@@ -38,7 +46,7 @@ export default async function handler(req, res) {
 
   try {
     // Expect optional public_id from client to keep filename readable
-    const { public_id } = req.body || {};
+    const { public_id } = body;
 
     const timestamp = Math.floor(Date.now() / 1000);
 

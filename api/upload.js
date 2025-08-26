@@ -4,7 +4,7 @@ const axios = require('axios');
 // Expects JSON body: { url: 'https://res.cloudinary.com/...', fileName?, fileSize?, customId? }
 // Env vars required: BROWSERSTACK_USERNAME, BROWSERSTACK_ACCESS_KEY
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: 'Method not allowed' });

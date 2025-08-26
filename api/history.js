@@ -2,7 +2,7 @@
 // In production, you'd use a database like Vercel KV, Planetscale, etc.
 let uploadHistory = [];
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method === 'GET') {
     // Return upload history
     return res.status(200).json(uploadHistory);
