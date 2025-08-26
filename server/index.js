@@ -16,6 +16,11 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json())
 
+// Serve static files from React build (for production)
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/dist')))
+}
+
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads')
 fs.ensureDirSync(uploadsDir)
@@ -291,7 +296,15 @@ app.use((error, req, res, next) => {
   res.status(500).json({ message: error.message || 'Internal server error' })
 })
 
+// Catch-all handler: send back React's index.html file for production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist/index.html'))
+  })
+}
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Health check: http://localhost:${PORT}/api/health`)
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
 })
