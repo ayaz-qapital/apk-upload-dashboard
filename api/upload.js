@@ -1,72 +1,116 @@
-const axios = require('axios');
+import { v2 as cloudinary } from 'cloudinary';
+import axios from 'axios';
+import FormData from 'form-data';
+import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs-extra';
+import path from 'path';
 
-// Upload to BrowserStack using a public URL (Cloudinary secure_url)
-// Expects JSON body: { url: 'https://res.cloudinary.com/...', fileName?, fileSize?, customId? }
-// Env vars required: BROWSERSTACK_USERNAME, BROWSERSTACK_ACCESS_KEY
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const DATA_DIR = '/tmp';
+const DB_FILE = path.join(DATA_DIR, 'uploads.json');
+
+const readHistory = async () => {
+  try {
+    if (await fs.pathExists(DB_FILE)) {
+      return await fs.readJson(DB_FILE);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+};
+
+const writeHistory = async (data) => {
+  try {
+    await fs.ensureDir(DATA_DIR);
+    await fs.writeJson(DB_FILE, data, { spaces: 2 });
+  } catch (err) {
+    console.error('Error writing history:', err);
+  }
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { BROWSERSTACK_USERNAME, BROWSERSTACK_ACCESS_KEY } = process.env;
-  if (!BROWSERSTACK_USERNAME || !BROWSERSTACK_ACCESS_KEY) {
-    return res.status(500).json({ error: 'BrowserStack credentials are not configured' });
-  }
-
   try {
-    const { url, customId } = req.body || {};
+    const { cloudinary_url, filename, file_size } = req.body;
 
-    if (!url) {
-      return res.status(400).json({ error: 'Missing required field: url' });
+    if (!cloudinary_url || !filename) {
+      return res.status(400).json({ error: 'Missing cloudinary_url or filename' });
     }
 
-    // BrowserStack upload via public URL
-    const form = new URLSearchParams();
-    form.append('url', url);
-    if (customId) form.append('custom_id', String(customId));
+    // Validate APK
+    if (!filename.toLowerCase().endsWith('.apk')) {
+      return res.status(400).json({ error: 'Only .apk files are supported' });
+    }
 
-    const bsResp = await axios.post(
+    // Check BrowserStack credentials
+    const username = process.env.BROWSERSTACK_USERNAME;
+    const accessKey = process.env.BROWSERSTACK_ACCESS_KEY;
+    if (!username || !accessKey) {
+      return res.status(500).json({ error: 'BrowserStack credentials not configured' });
+    }
+
+    // Download file from Cloudinary
+    const fileResponse = await axios.get(cloudinary_url, {
+      responseType: 'arraybuffer',
+      timeout: 60000
+    });
+
+    // Upload to BrowserStack
+    const form = new FormData();
+    form.append('file', Buffer.from(fileResponse.data), { filename });
+
+    const bsResponse = await axios.post(
       'https://api-cloud.browserstack.com/app-automate/upload',
       form,
       {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        auth: {
-          username: BROWSERSTACK_USERNAME,
-          password: BROWSERSTACK_ACCESS_KEY,
-        },
-        timeout: 120000,
+        auth: { username, password: accessKey },
+        headers: form.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 120000
       }
     );
 
-    const data = bsResp.data || {};
-
-    const uploadRecord = {
-      id: Date.now(),
-      fileName: req.body.fileName || 'app.apk',
-      fileSize: req.body.fileSize || 0,
-      uploadTime: new Date().toISOString(),
-      appUrl: data.app_url || null,
-      customId: data.custom_id || null,
-      status: 'success'
-    };
-
-    // Save to history (call our history API)
-    try {
-      await axios.post(`${req.headers.origin || 'https://' + req.headers.host}/api/history`, uploadRecord);
-    } catch (historyErr) {
-      console.warn('Failed to save to history:', historyErr.message);
+    const { app_url, app_id, shareable_id } = bsResponse.data || {};
+    if (!app_url) {
+      return res.status(502).json({ 
+        error: 'Unexpected BrowserStack response', 
+        details: bsResponse.data 
+      });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'APK uploaded successfully to BrowserStack',
-      data: uploadRecord,
-    });
+    // Save to history
+    const record = {
+      id: uuidv4(),
+      fileName: filename,
+      size: file_size || fileResponse.data.byteLength,
+      createdAt: new Date().toISOString(),
+      app_url,
+      app_id: app_id || null,
+      shareable_id: shareable_id || null,
+      cloudinary_url
+    };
+
+    const items = await readHistory();
+    items.push(record);
+    await writeHistory(items);
+
+    res.json(record);
   } catch (err) {
-    const detail = err.response?.data?.error || err.response?.data || err.message;
-    console.error('BrowserStack upload error:', detail);
-    return res.status(500).json({ success: false, error: `BrowserStack upload failed: ${detail}` });
+    console.error('Upload error:', err?.response?.data || err);
+    res.status(500).json({
+      error: 'Upload failed',
+      details: err?.response?.data || err?.message || 'Unknown error'
+    });
   }
 }

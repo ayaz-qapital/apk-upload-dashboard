@@ -1,22 +1,30 @@
-// Simple in-memory history storage for demo purposes
-// In production, you'd use a database like Vercel KV, Planetscale, etc.
-let uploadHistory = [];
+import fs from 'fs-extra';
+import path from 'path';
+
+const DATA_DIR = '/tmp';
+const DB_FILE = path.join(DATA_DIR, 'uploads.json');
+
+const readHistory = async () => {
+  try {
+    if (await fs.pathExists(DB_FILE)) {
+      return await fs.readJson(DB_FILE);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+};
 
 export default async function handler(req, res) {
-  if (req.method === 'GET') {
-    // Return upload history
-    return res.status(200).json(uploadHistory);
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-  
-  if (req.method === 'POST') {
-    // Add new upload record
-    const record = req.body;
-    if (record) {
-      uploadHistory.unshift(record);
-    }
-    return res.status(200).json({ success: true });
+
+  try {
+    const items = await readHistory();
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (err) {
+    console.error('History error:', err);
+    res.status(500).json({ error: 'Failed to fetch history' });
   }
-  
-  res.setHeader('Allow', ['GET', 'POST']);
-  return res.status(405).json({ error: 'Method not allowed' });
-};
+}

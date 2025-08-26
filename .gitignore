@@ -1,10 +1,26 @@
 # Dependencies
 node_modules/
+client/node_modules/
+server/node_modules/
 
 # Environment variables
 .env
+.env.local
+.env.production
+.env.development
+server/.env
+
+# Build outputs
+client/dist/
+client/build/
+.next/
+out/
+
+# Vercel
+.vercel
 
 # Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -21,23 +37,20 @@ coverage/
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage
-.grunt
-
-# Bower dependency directory
-bower_components
-
-# node-waf configuration
-.lock-wscript
-
-# Compiled binary addons
-build/Release
-
 # Dependency directories
 jspm_packages/
 
 # Optional npm cache directory
 .npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
 
 # Optional REPL history
 .node_repl_history
@@ -48,11 +61,17 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
 
-# Uploads directory (temporary files)
-uploads/
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Temporary folders
+tmp/
+temp/
+/tmp
 
 # OS generated files
 .DS_Store
@@ -63,7 +82,9 @@ uploads/
 ehthumbs.db
 Thumbs.db
 
-# Local Netlify folder
-.netlify
-
-.vercel
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

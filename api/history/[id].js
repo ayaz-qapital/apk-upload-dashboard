@@ -1,25 +1,37 @@
-// Handle DELETE requests for specific history records
-// This is a dynamic route: /api/history/[id]
+import fs from 'fs-extra';
+import path from 'path';
 
-// Simple in-memory storage (matches history.js)
-// In production, use a proper database
-let uploadHistory = [];
+const DATA_DIR = '/tmp';
+const DB_FILE = path.join(DATA_DIR, 'uploads.json');
 
-module.exports = async function handler(req, res) {
-  const { id } = req.query;
-  
-  if (req.method === 'DELETE') {
-    const recordId = parseInt(id);
-    const initialLength = uploadHistory.length;
-    uploadHistory = uploadHistory.filter(record => record.id !== recordId);
-    
-    if (uploadHistory.length < initialLength) {
-      return res.status(200).json({ success: true, message: 'Record deleted' });
-    } else {
-      return res.status(404).json({ error: 'Record not found' });
+const readHistory = async () => {
+  try {
+    if (await fs.pathExists(DB_FILE)) {
+      return await fs.readJson(DB_FILE);
     }
+    return [];
+  } catch {
+    return [];
   }
-  
-  res.setHeader('Allow', ['DELETE']);
-  return res.status(405).json({ error: 'Method not allowed' });
 };
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { id } = req.query;
+    const items = await readHistory();
+    const item = items.find(i => i.id === id);
+    
+    if (!item) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    
+    res.json(item);
+  } catch (err) {
+    console.error('History item error:', err);
+    res.status(500).json({ error: 'Failed to fetch history item' });
+  }
+}
