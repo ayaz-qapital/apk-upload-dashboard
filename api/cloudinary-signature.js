@@ -17,8 +17,23 @@ module.exports = async function handler(req, res) {
 
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_FOLDER } = process.env;
 
+  // Debug logging
+  console.log('Environment check:', {
+    hasCloudName: !!CLOUDINARY_CLOUD_NAME,
+    hasApiKey: !!CLOUDINARY_API_KEY,
+    hasApiSecret: !!CLOUDINARY_API_SECRET,
+    cloudName: CLOUDINARY_CLOUD_NAME?.substring(0, 3) + '...',
+  });
+
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-    return res.status(500).json({ error: 'Cloudinary environment variables are not configured' });
+    return res.status(500).json({ 
+      error: 'Cloudinary environment variables are not configured',
+      debug: {
+        hasCloudName: !!CLOUDINARY_CLOUD_NAME,
+        hasApiKey: !!CLOUDINARY_API_KEY,
+        hasApiSecret: !!CLOUDINARY_API_SECRET
+      }
+    });
   }
 
   try {
