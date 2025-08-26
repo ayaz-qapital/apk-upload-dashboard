@@ -4,7 +4,7 @@
       "maxDuration": 300
     }
   },
-  "buildCommand": "npm --prefix client run build",
+  "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "routes": [
     {
